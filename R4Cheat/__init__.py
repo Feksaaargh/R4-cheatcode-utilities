@@ -100,17 +100,17 @@ class CheatEntry:
     def __init__(self):
         self.name: str = ""
         self.comment: str = ""
-        self.cheat: bytes = b''
+        self.cheat: list[int] = []  # each 4 byte chunk of the code converted to an int
         self.enabled: bool = False
 
     def load(self, file_handle, options: LoadingOptions, size: int, enabled: bool) -> "CheatEntry":
         name_and_comment = read_name_comment_pair(file_handle)
         name_and_comment_len = ceil((len(name_and_comment[0]) + 1 + len(name_and_comment[1])+1) / 4) * 4
-        self.name: str = name_and_comment[0].decode(options.encoding)
-        self.comment: str = name_and_comment[1].decode(options.encoding)
+        self.name = name_and_comment[0].decode(options.encoding)
+        self.comment = name_and_comment[1].decode(options.encoding)
         cheat_length = int.from_bytes(file_handle.read(4), "little")
-        self.cheat: list[int] = [int.from_bytes(file_handle.read(4), "little") for _ in range(cheat_length)]
-        self.enabled: bool = enabled
+        self.cheat = [int.from_bytes(file_handle.read(4), "little") for _ in range(cheat_length)]
+        self.enabled = enabled
         intended_size = name_and_comment_len + (cheat_length * 4) + 4
         if intended_size != size * 4:
             print(f"WARNING: Cheat entry inconsistent; size did not reflect content size accurately (was {intended_size}, thought it would be {size * 4})")
@@ -121,8 +121,8 @@ class CheatEntry:
         # skipping length for now
         retval: bytes = b'\x00\x01' if self.enabled else b'\x00\x00'
         retval += make_name_comment_pair(self.name, self.comment, options.encoding)
-        retval += (len(self.cheat) // 4).to_bytes(4, "little")
-        retval += self.cheat
+        retval += len(self.cheat).to_bytes(4, "little")
+        retval += b''.join(i.to_bytes(4, "little") for i in self.cheat)
         # add length here
         retval = (len(retval) // 4).to_bytes(2, "little") + retval
         return retval

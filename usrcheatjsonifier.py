@@ -15,8 +15,6 @@ def hexify_and_split(inp: bytes, bytes_per_split: int, delimiter: str = " "):
 
 
 def dictionaryify_cheat_entry(entry: CheatEntry):
-    # encoded_cheat = [hex(chunk).replace("0x", "") for chunk in entry.cheat]
-    # encoded_cheat = ' '.join([f"{i:0>8}" for i in encoded_cheat])
     return {
         "type": "cheat",
         "name": entry.name,
