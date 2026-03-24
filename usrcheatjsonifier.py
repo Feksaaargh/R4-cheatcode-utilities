@@ -24,9 +24,14 @@ def dictionaryify_cheat_entry(entry: CheatEntry):
     }
 
 
-def dedictionaryify_cheat_entry(entry: dict) -> CheatEntry:
+def dedictionarify_cheat_entry(entry: dict) -> CheatEntry:
     assert entry["type"] == "cheat"
     retval = CheatEntry()
+    retval.name = entry["name"]
+    retval.comment = entry["comment"]
+    retval.enabled = entry["enabled"]
+    retval.cheat = [int.from_bytes(bytes.fromhex(i), "big") for i in entry["code"].split(" ")]
+    return retval
 
 
 def dictionaryify_cheat_folder(folder: CheatFolder):
@@ -35,12 +40,18 @@ def dictionaryify_cheat_folder(folder: CheatFolder):
         "name": folder.name,
         "comment": folder.comment,
         "onehot": folder.is_onehot_button,
-        "entries": [dictionaryify_cheat_entry(entry) for entry in folder.owned_cheats]
+        "owned_cheats": [dictionaryify_cheat_entry(entry) for entry in folder.owned_cheats]
     }
 
 
 def dedictionarify_cheat_folder(entry: dict) -> CheatFolder:
-    pass
+    assert entry["type"] == "folder"
+    retval = CheatFolder()
+    retval.name = entry["name"]
+    retval.comment = entry["comment"]
+    retval.enabled = entry["enabled"]
+    retval.owned_cheats = [dedictionarify_cheat_entry(cheat) for cheat in entry["entries"]]
+    return retval
 
 
 def dictionaryify_game_entry(game: GameEntry):
@@ -48,10 +59,8 @@ def dictionaryify_game_entry(game: GameEntry):
     for entry in game.contents:
         if isinstance(entry, CheatFolder):
             dictionaryified_cheats.append(dictionaryify_cheat_folder(entry))
-        elif isinstance(entry, CheatEntry):
-            dictionaryified_cheats.append(dictionaryify_cheat_entry(entry))
         else:
-            print("Something very bad has happened. (game entry had strange contents)")
+            dictionaryified_cheats.append(dictionaryify_cheat_entry(entry))
     return {
         "name": game.name,
         "gameID": game.game_ID,
@@ -61,8 +70,22 @@ def dictionaryify_game_entry(game: GameEntry):
         "cheats": dictionaryified_cheats
     }
 
+
 def dedictionarify_game_entry(entry: dict) -> GameEntry:
-    pass
+    dedictionaryified_cheats = []
+    for cheat in entry["cheats"]:
+        if cheat["type"] == "cheat":
+            dedictionaryified_cheats.append(dedictionarify_cheat_entry(cheat))
+        else:
+            dedictionaryified_cheats.append(dedictionarify_cheat_folder(cheat))
+    retval = GameEntry()
+    retval.name = entry["name"]
+    retval.game_ID = entry["gameID"]
+    retval.checksum = int.from_bytes(bytes.fromhex(entry["checksum"]), "big")
+    retval.enabled = entry["enabled"]
+    retval.master_code = [int.from_bytes(bytes.fromhex(i), "big") for i in entry["masterCode"].split(" ")]
+    retval.contents = dedictionaryified_cheats
+    return retval
 
 
 def main():
@@ -86,8 +109,21 @@ def main():
     # ====================================
 
     if args.decode:
-        # TODO: Implement
-        print("NYI")
+        # decoding file
+        with open(args.source, "rt") as source:
+            cheat_file: dict = json.load(source)
+
+        usrcheat: R4CheatFile = R4CheatFile(not args.no_fix)
+        usrcheat.name = cheat_file["name"]
+        usrcheat.encoding = cheat_file["encoding"]
+        usrcheat.enabled = cheat_file["enabled"]
+        usrcheat.game_entries = [dedictionarify_game_entry(game) for game in cheat_file["games"]]
+
+        with open(args.dest, "wb" if args.overwrite else "xb") as dest:
+            usrcheat.write(dest)
+
+        print("Done")
+
     else:
         # encoding file
         usrcheat: R4CheatFile = R4CheatFile(not args.no_fix)
@@ -105,7 +141,7 @@ def main():
         with open(args.dest, "wt" if args.overwrite else "xt") as dest:
             json.dump(output, dest, indent=2)
 
-        print("Done encoding")
+        print("Done")
 
 
 if __name__ == "__main__":

@@ -84,7 +84,7 @@ class AddressBookEntry:
                (self.reserved == b'\0\0\0\0')
 
     def encode(self, options: LoadingOptions) -> bytes:
-        if len(self.game_ID) != 4 or len(self.checksum) != 4:
+        if len(self.game_ID) != 4 or len(self.reserved) != 4:
             raise ValueError("Failed to encode AddressBookEntry: length of values were incorrect")
         return self.game_ID + \
             self.checksum.to_bytes(4, "little") + \
@@ -141,14 +141,14 @@ class CheatFolder:
         self.comment: str = ""
         self.is_onehot_button: bool = False
         self.owned_cheats: list[CheatEntry] = []
-        self._allow_automatic_fixes = True
+        self._allow_automatic_fixes: bool = True
 
     def load(self, file_handle, options: LoadingOptions, is_onehot_button: bool) -> "CheatFolder":
         name_and_comment = read_name_comment_pair(file_handle)
-        self.name: str = name_and_comment[0].decode(options.encoding)
-        self.comment: str = name_and_comment[1].decode(options.encoding)
-        self.is_onehot_button: bool = is_onehot_button
-        self.owned_cheats: list[CheatEntry] = []
+        self.name = name_and_comment[0].decode(options.encoding)
+        self.comment = name_and_comment[1].decode(options.encoding)
+        self.is_onehot_button = is_onehot_button
+        self.owned_cheats = []
         self._allow_automatic_fixes = options.allow_automatic_fixes
         return self
 
@@ -159,7 +159,7 @@ class CheatFolder:
     # If zero entries are enabled, enables the first one.
     # If more than one entry is enabled, disables all but the first enabled one.
     # Prints a warning if anything was corrected.
-    # If it's not a onehot button, this does nothing.
+    # If it's not a onehot button or if automatic fixes are disallowed, this does nothing.
     def check_consistency(self):
         if (not self.is_onehot_button) or (not self._allow_automatic_fixes):
             return
@@ -212,11 +212,11 @@ class GameEntry:
         self.contents: list[CheatFolder | CheatEntry] = []
 
     def load(self, file_handle, options: LoadingOptions, game_ID: bytes, checksum: int) -> "GameEntry":
-        self.name: str = read_4byte_padded_string(file_handle).decode(options.encoding)
-        self.game_ID: str = game_ID.decode("ascii")
+        self.name = read_4byte_padded_string(file_handle).decode(options.encoding)
+        self.game_ID = game_ID.decode("ascii")
         self.checksum = checksum
         n_entries: int = int.from_bytes(file_handle.read(2), "little")
-        self.enabled: bool = file_handle.read(2) == b'\x00\xF0'
+        self.enabled = file_handle.read(2) == b'\x00\xF0'
         master_code_unflipped: bytes = file_handle.read(32)
         self.master_code: list[int] = [int.from_bytes(master_code_unflipped[i:i+4], "little") for i in range(0, 32, 4)]
         self.read_contents(file_handle, options, n_entries)
@@ -354,7 +354,7 @@ class R4CheatFile:
         # create header
         file_handle.write(b'R4 CheatCode\x00\x01\x00\x00')
         file_handle.write(self.name.encode(self.encoding))
-        file_handle.write(b'\x00' * (0x4C - len(file_handle.tell())))
+        file_handle.write(b'\x00' * (0x4C - file_handle.tell()))
         match self.encoding:
             case "gbk":
                 file_handle.write(b'\xD5\x53\x41\x59')
@@ -375,7 +375,7 @@ class R4CheatFile:
             encoded_games.append(game.encode(LoadingOptions(self.encoding, self._allow_automatic_fixes)))
 
         # starting position is header + length of entire address book
-        game_offset = 0x100 + ((len(encoded_games)+1) * 32)
+        game_offset = 0x100 + ((len(encoded_games)+1) * 16)
         for game_idx in range(len(encoded_games)):
             entry = AddressBookEntry()
             entry.game_ID = self.game_entries[game_idx].game_ID.encode("ascii")
@@ -383,6 +383,8 @@ class R4CheatFile:
             entry.offset = game_offset
             game_offset += len(encoded_games[game_idx])
             file_handle.write(entry.encode(LoadingOptions(self.encoding, self._allow_automatic_fixes)))
+        # end the address book
+        file_handle.write(bytes(16))
 
         # can now add game entries to result
         for game in encoded_games:
