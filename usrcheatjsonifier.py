@@ -57,7 +57,7 @@ def dictionaryify_game_entry(game: GameEntry):
     return {
         "name": game.name,
         "gameID": game.game_ID,
-        "checksum": game.checksum.hex(),
+        "checksum": game.checksum.to_bytes(4, "big").hex(),
         "enabled": game.enabled,
         "masterCode": hexify_and_split(b''.join(i.to_bytes(4, "big") for i in game.master_code), 4),
         "cheats": dictionaryified_cheats

@@ -63,33 +63,37 @@ class LoadingOptions:
 class AddressBookEntry:
     def __init__(self):
         self.game_ID: bytes = b'\0\0\0\0'
-        self.checksum: bytes = b'\0\0\0\0'
+        self.checksum: int = 0
         self.offset: int = 0
         self.reserved: bytes = b'\0\0\0\0'
 
     def load(self, file_handle) -> "AddressBookEntry":
         rawbytes = file_handle.read(16)
-        self.game_ID: bytes = rawbytes[0:4]
-        self.checksum: bytes = rawbytes[7:3:-1]
-        self.offset: int = int.from_bytes(rawbytes[8:12], "little")
-        self.reserved: bytes = rawbytes[12:16]
+        self.game_ID = rawbytes[0:4]
+        self.checksum = int.from_bytes(rawbytes[4:8], "little")
+        self.offset = int.from_bytes(rawbytes[8:12], "little")
+        self.reserved = rawbytes[12:16]
         if self.reserved != b'\0\0\0\0':
             print("WARNING: Supposed reserved section in address book entry is NOT blank! Bad file?")
         return self
 
     def is_blank(self) -> bool:
         return (self.game_ID == b'\0\0\0\0') and \
-               (self.checksum == b'\0\0\0\0') and \
+               (self.checksum == 0) and \
                (self.offset == 0) and \
                (self.reserved == b'\0\0\0\0')
 
     def encode(self, options: LoadingOptions) -> bytes:
         if len(self.game_ID) != 4 or len(self.checksum) != 4:
             raise ValueError("Failed to encode AddressBookEntry: length of values were incorrect")
-        return self.game_ID + self.checksum + self.offset.to_bytes(4, "little") + self.reserved
+        return self.game_ID + \
+            self.checksum.to_bytes(4, "little") + \
+            self.offset.to_bytes(4, "little") + \
+            self.reserved
 
     def __str__(self):
-        return f"AddressBookEntry(game_ID={self.game_ID}, checksum={self.checksum}, offset={self.offset}, reserved={self.reserved})"
+        checksum_hex = self.checksum.to_bytes(4, "big").hex()
+        return f"AddressBookEntry(game_ID={self.game_ID}, checksum={checksum_hex}, offset={self.offset}, reserved={self.reserved})"
 
 
 class CheatEntry:
@@ -202,15 +206,15 @@ class GameEntry:
     def __init__(self):
         self.name: str = ""
         self.game_ID: str = "AAAA"
-        self.checksum: bytes = b'\0\0\0\0'
+        self.checksum: int = 0
         self.enabled: bool = True
         self.master_code: list[int] = [0] * 8
         self.contents: list[CheatFolder | CheatEntry] = []
 
-    def load(self, file_handle, options: LoadingOptions, game_ID: bytes, checksum: bytes) -> "GameEntry":
+    def load(self, file_handle, options: LoadingOptions, game_ID: bytes, checksum: int) -> "GameEntry":
         self.name: str = read_4byte_padded_string(file_handle).decode(options.encoding)
         self.game_ID: str = game_ID.decode("ascii")
-        self.checksum: bytes = checksum
+        self.checksum = checksum
         n_entries: int = int.from_bytes(file_handle.read(2), "little")
         self.enabled: bool = file_handle.read(2) == b'\x00\xF0'
         master_code_unflipped: bytes = file_handle.read(32)
@@ -265,7 +269,8 @@ class GameEntry:
         return retval
 
     def __str__(self):
-        retval = f"GAME ENTRY | Name = \"{self.name}\" | Game ID = {self.game_ID} | Checksum = {self.checksum}\n"
+        checksum_hex = self.checksum.to_bytes(4, "big").hex()
+        retval = f"GAME ENTRY | Name = \"{self.name}\" | Game ID = {self.game_ID} | Checksum = {checksum_hex}\n"
         master_code_repr = [i.to_bytes(4, "big").hex() for i in self.master_code]
         retval += f"Master code enabled = {self.enabled} | Master code = {master_code_repr}"
         stringified_contents = ""
