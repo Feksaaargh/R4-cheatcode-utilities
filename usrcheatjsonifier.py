@@ -30,7 +30,10 @@ def dedictionarify_cheat_entry(entry: dict) -> CheatEntry:
     retval.name = entry["name"]
     retval.comment = entry["comment"]
     retval.enabled = entry["enabled"]
-    retval.cheat = [int.from_bytes(bytes.fromhex(i), "big") for i in entry["code"].split(" ")]
+    if entry["code"]:
+        retval.cheat = [int.from_bytes(bytes.fromhex(i), "big") for i in entry["code"].split(" ")]
+    else:
+        retval.cheat = []
     return retval
 
 
