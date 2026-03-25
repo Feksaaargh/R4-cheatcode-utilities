@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from R4Cheat import R4CheatFile, GameEntry, CheatEntry, CheatFolder, MaybeDecodableString
+import os
 import json
 import argparse
 
@@ -133,6 +134,19 @@ def main():
     parser.add_argument('dest', help="Output file")
 
     args = parser.parse_args()
+
+    # ====================================
+
+    if not os.path.isfile(args.source):
+        print("ERROR: Source path is not a file!")
+        exit(1)
+
+    if not args.overwrite and os.path.exists(args.dest):
+        print("ERROR: Something exists at the destination! Use --overwrite to overwrite it.")
+        exit(1)
+    if args.overwrite and os.path.exists(args.dest) and not os.path.isfile(args.dest):
+        print("ERROR: Cannot overwrite destination since it's not a file!")
+        exit(1)
 
     # ====================================
 
