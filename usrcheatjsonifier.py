@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from R4Cheat import R4CheatFile, GameEntry, CheatEntry, CheatFolder
+from R4Cheat import R4CheatFile, GameEntry, CheatEntry, CheatFolder, MaybeDecodableString
 import json
 import argparse
 
@@ -14,21 +14,46 @@ def hexify_and_split(inp: bytes, bytes_per_split: int, delimiter: str = " "):
     return delimiter.join([hexified[chars_per_split*i:min(chars_per_split*(i+1), len(hexified))] for i in range(num_segments)])
 
 
+def dictionarify_maybedecodable_string(value: MaybeDecodableString) -> str | dict:
+    if isinstance(value.contents, str):
+        return value.contents
+    else:
+        return {
+            "type": "maybedecodablestring",
+            "value": value.contents.hex(),
+            "encoding": value.encoding
+        }
+
+
+def dedictionarify_maybedecodable_string(value: str | dict, default_encoding: str) -> MaybeDecodableString:
+    retval = MaybeDecodableString()
+    if isinstance(value, str):
+        # was a valid string when encoded
+        retval.contents = value
+        retval.encoding = default_encoding
+    else:
+        # was not a valid string when encoded
+        assert value["type"] == "maybedecodablestring"
+        retval.contents = bytes.fromhex(value["value"])
+        retval.encoding = value["encoding"]
+    return retval
+
+
 def dictionaryify_cheat_entry(entry: CheatEntry):
     return {
         "type": "cheat",
-        "name": entry.name,
-        "comment": entry.comment,
+        "name": dictionarify_maybedecodable_string(entry.name),
+        "comment": dictionarify_maybedecodable_string(entry.comment),
         "enabled": entry.enabled,
         "code": hexify_and_split(b''.join(i.to_bytes(4, "big") for i in entry.cheat), 4)
     }
 
 
-def dedictionarify_cheat_entry(entry: dict) -> CheatEntry:
+def dedictionarify_cheat_entry(entry: dict, default_encoding: str) -> CheatEntry:
     assert entry["type"] == "cheat"
     retval = CheatEntry()
-    retval.name = entry["name"]
-    retval.comment = entry["comment"]
+    retval.name = dedictionarify_maybedecodable_string(entry["name"], default_encoding)
+    retval.comment = dedictionarify_maybedecodable_string(entry["comment"], default_encoding)
     retval.enabled = entry["enabled"]
     if entry["code"]:
         retval.cheat = [int.from_bytes(bytes.fromhex(i), "big") for i in entry["code"].split(" ")]
@@ -40,20 +65,20 @@ def dedictionarify_cheat_entry(entry: dict) -> CheatEntry:
 def dictionaryify_cheat_folder(folder: CheatFolder):
     return {
         "type": "folder",
-        "name": folder.name,
-        "comment": folder.comment,
+        "name": dictionarify_maybedecodable_string(folder.name),
+        "comment": dictionarify_maybedecodable_string(folder.comment),
         "onehot": folder.is_onehot_button,
         "owned_cheats": [dictionaryify_cheat_entry(entry) for entry in folder.owned_cheats]
     }
 
 
-def dedictionarify_cheat_folder(entry: dict) -> CheatFolder:
+def dedictionarify_cheat_folder(entry: dict, default_encoding: str) -> CheatFolder:
     assert entry["type"] == "folder"
     retval = CheatFolder()
-    retval.name = entry["name"]
-    retval.comment = entry["comment"]
+    retval.name = dedictionarify_maybedecodable_string(entry["name"], default_encoding)
+    retval.comment = dedictionarify_maybedecodable_string(entry["comment"], default_encoding)
     retval.is_onehot_button = entry["onehot"]
-    retval.owned_cheats = [dedictionarify_cheat_entry(cheat) for cheat in entry["owned_cheats"]]
+    retval.owned_cheats = [dedictionarify_cheat_entry(cheat, default_encoding) for cheat in entry["owned_cheats"]]
     return retval
 
 
@@ -65,7 +90,7 @@ def dictionaryify_game_entry(game: GameEntry):
         else:
             dictionaryified_cheats.append(dictionaryify_cheat_entry(entry))
     return {
-        "name": game.name,
+        "name": dictionarify_maybedecodable_string(game.name),
         "gameID": game.game_ID,
         "checksum": game.checksum.to_bytes(4, "big").hex(),
         "enabled": game.enabled,
@@ -74,15 +99,15 @@ def dictionaryify_game_entry(game: GameEntry):
     }
 
 
-def dedictionarify_game_entry(entry: dict) -> GameEntry:
+def dedictionarify_game_entry(entry: dict, default_encoding: str) -> GameEntry:
     dedictionaryified_cheats = []
     for cheat in entry["cheats"]:
         if cheat["type"] == "cheat":
-            dedictionaryified_cheats.append(dedictionarify_cheat_entry(cheat))
+            dedictionaryified_cheats.append(dedictionarify_cheat_entry(cheat, default_encoding))
         else:
-            dedictionaryified_cheats.append(dedictionarify_cheat_folder(cheat))
+            dedictionaryified_cheats.append(dedictionarify_cheat_folder(cheat, default_encoding))
     retval = GameEntry()
-    retval.name = entry["name"]
+    retval.name = dedictionarify_maybedecodable_string(entry["name"], default_encoding)
     retval.game_ID = entry["gameID"]
     retval.checksum = int.from_bytes(bytes.fromhex(entry["checksum"]), "big")
     retval.enabled = entry["enabled"]
@@ -120,7 +145,7 @@ def main():
         usrcheat.name = cheat_file["name"]
         usrcheat.encoding = cheat_file["encoding"]
         usrcheat.enabled = cheat_file["enabled"]
-        usrcheat.game_entries = [dedictionarify_game_entry(game) for game in cheat_file["games"]]
+        usrcheat.game_entries = [dedictionarify_game_entry(game, cheat_file["encoding"]) for game in cheat_file["games"]]
 
         with open(args.dest, "wb" if args.overwrite else "xb") as dest:
             usrcheat.write(dest)
@@ -135,7 +160,7 @@ def main():
             usrcheat.load(file)
 
         output = {
-            "name": usrcheat.name,
+            "name": dictionarify_maybedecodable_string(usrcheat.name),
             "encoding": usrcheat.encoding,
             "enabled": usrcheat.enabled,
             "games": [dictionaryify_game_entry(game) for game in usrcheat.game_entries]

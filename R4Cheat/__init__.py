@@ -4,6 +4,41 @@ from math import ceil
 # From https://medium.com/@natereprogle/reverse-engineering-a-long-lost-file-format-usrcheat-dat-2c15fefe2f63
 
 
+# R4CCE has a weird (or broken) GBK encoder/decoder which can produce output that Python cannot decode.
+# This is a hacky solution that retains any broken text as bytes and re-emits them as is when the text needs to be encoded.
+# This may produce mojibake when trying to convert encodings. A message will be printed if there is any chance of issues.
+class MaybeDecodableString:
+    def __init__(self, value: bytes | None = None, encoding: str | None = None):
+        if value is not None and encoding is not None:
+            self.set(value, encoding)
+        else:
+            self.contents: str | bytes = ""
+            self.encoding: str = "utf-8"
+
+    def set(self, value: bytes, encoding: str):
+        self.encoding = encoding
+        try:
+            self.contents = value.decode(encoding)
+        except UnicodeDecodeError:
+            self.contents = value
+
+    def encode(self, encoding: str) -> bytes:
+        if isinstance(self.contents, str):
+            return self.contents.encode(encoding)
+        else:
+            # is bytes
+            if encoding != self.encoding:
+                print(f"WARNING: Was not able to convert string {self.contents} from {self.encoding} to {encoding} due to a badly encoded input string! Will emit bytes as is, but this will likely produce mojibake!")
+            return self.contents
+
+    # Meant for debugging purposes, not functional use
+    def __str__(self) -> str:
+        if isinstance(self.contents, str):
+            return self.contents
+        else:
+            return str(self.contents)
+
+
 # Reads a null terminated string that is padded to 4 bytes
 def read_4byte_padded_string(file_handle) -> bytes:
     file_pos_start = file_handle.tell()
@@ -20,7 +55,7 @@ def read_4byte_padded_string(file_handle) -> bytes:
 
 
 # Creates a null terminated string that is padded to 4 bytes
-def make_4byte_padded_string(inp: str, encoding: str) -> bytes:
+def make_4byte_padded_string(inp: MaybeDecodableString, encoding: str) -> bytes:
     retval: bytes = inp.encode(encoding)
     retval += b'\0' * (4 - (len(retval) % 4))
     return retval
@@ -50,7 +85,7 @@ def read_name_comment_pair(file_handle) -> tuple[bytes, bytes]:
 
 
 # Combines two null terminated strings that are all together padded to 4 bytes
-def make_name_comment_pair(name: str, comment: str, encoding: str) -> bytes:
+def make_name_comment_pair(name: MaybeDecodableString, comment: MaybeDecodableString, encoding: str) -> bytes:
     retval: bytes = name.encode(encoding) + b'\0' + comment.encode(encoding)
     retval += b'\0' * (4 - (len(retval) % 4))
     return retval
@@ -103,16 +138,16 @@ class AddressBookEntry:
 # A single, normal cheat
 class CheatEntry:
     def __init__(self):
-        self.name: str = ""
-        self.comment: str = ""
+        self.name: MaybeDecodableString = MaybeDecodableString()
+        self.comment: MaybeDecodableString = MaybeDecodableString()
         self.cheat: list[int] = []  # each 4 byte chunk of the code converted to an int
         self.enabled: bool = False
 
     def load(self, file_handle, options: LoadingOptions, size: int, enabled: bool) -> "CheatEntry":
         name_and_comment = read_name_comment_pair(file_handle)
         name_and_comment_len = ceil((len(name_and_comment[0]) + 1 + len(name_and_comment[1])+1) / 4) * 4
-        self.name = name_and_comment[0].decode(options.encoding)
-        self.comment = name_and_comment[1].decode(options.encoding)
+        self.name = MaybeDecodableString(name_and_comment[0], options.encoding)
+        self.comment = MaybeDecodableString(name_and_comment[1], options.encoding)
         cheat_length = int.from_bytes(file_handle.read(4), "little")
         self.cheat = [int.from_bytes(file_handle.read(4), "little") for _ in range(cheat_length)]
         self.enabled = enabled
@@ -133,7 +168,7 @@ class CheatEntry:
         return retval
 
     def __str__(self):
-        retval = f"CHEAT ENTRY | Name = \"{self.name}\" | Comment = \"{self.comment}\" | Enabled = {self.enabled}\n"
+        retval = f"CHEAT ENTRY | Name = \"{str(self.name)}\" | Comment = \"{str(self.comment)}\" | Enabled = {self.enabled}\n"
         encoded_cheat = [hex(chunk).replace("0x", "") for chunk in self.cheat]
         encoded_cheat = ' '.join([f"{i:0>8}" for i in encoded_cheat])
         retval += f"Cheat: \"{encoded_cheat}\""
@@ -143,16 +178,16 @@ class CheatEntry:
 # A folder of cheats. Can only store cheats, folders cannot be nested.
 class CheatFolder:
     def __init__(self):
-        self.name: str = ""
-        self.comment: str = ""
+        self.name: MaybeDecodableString = MaybeDecodableString()
+        self.comment: MaybeDecodableString = MaybeDecodableString()
         self.is_onehot_button: bool = False
         self.owned_cheats: list[CheatEntry] = []
         self._allow_automatic_fixes: bool = True
 
     def load(self, file_handle, options: LoadingOptions, is_onehot_button: bool) -> "CheatFolder":
         name_and_comment = read_name_comment_pair(file_handle)
-        self.name = name_and_comment[0].decode(options.encoding)
-        self.comment = name_and_comment[1].decode(options.encoding)
+        self.name = MaybeDecodableString(name_and_comment[0], options.encoding)
+        self.comment = MaybeDecodableString(name_and_comment[1], options.encoding)
         self.is_onehot_button = is_onehot_button
         self.owned_cheats = []
         self._allow_automatic_fixes = options.allow_automatic_fixes
@@ -176,7 +211,7 @@ class CheatFolder:
             if num_enabled_cheats >= 1:
                 cheat.enabled = False
         if num_enabled_cheats > 1:
-            print(f"Folder with onehot button ({self.name}) had too many cheats enabled. Disabled all but the first enabled entry.")
+            print(f"Folder with onehot button ({str(self.name)}) had too many cheats enabled. Disabled all but the first enabled entry.")
 
     def encode(self, options: LoadingOptions) -> bytes:
         retval: bytes = len(self.owned_cheats).to_bytes(2, "little")
@@ -191,7 +226,7 @@ class CheatFolder:
         return len(self.owned_cheats)
 
     def __str__(self):
-        retval = f"CHEAT FOLDER | Name = \"{self.name}\" | Comment = \"{self.comment}\" | Is onehot button = {self.is_onehot_button}\n"
+        retval = f"CHEAT FOLDER | Name = \"{str(self.name)}\" | Comment = \"{str(self.comment)}\" | Is onehot button = {self.is_onehot_button}\n"
         retval += f"Owned cheats: ["
         stringified_contents = ""
         for item in self.owned_cheats:
@@ -205,7 +240,7 @@ class CheatFolder:
 # A game entry. Can contain cheats and folders.
 class GameEntry:
     def __init__(self):
-        self.name: str = ""
+        self.name: MaybeDecodableString = MaybeDecodableString()
         self.game_ID: str = "AAAA"
         self.checksum: int = 0
         self.enabled: bool = True
@@ -213,7 +248,7 @@ class GameEntry:
         self.contents: list[CheatFolder | CheatEntry] = []
 
     def load(self, file_handle, options: LoadingOptions, game_ID: bytes, checksum: int) -> "GameEntry":
-        self.name = read_4byte_padded_string(file_handle).decode(options.encoding)
+        self.name = MaybeDecodableString(read_4byte_padded_string(file_handle), options.encoding)
         self.game_ID = game_ID.decode("ascii")
         self.checksum = checksum
         n_entries: int = int.from_bytes(file_handle.read(2), "little")
@@ -271,7 +306,7 @@ class GameEntry:
 
     def __str__(self):
         checksum_hex = self.checksum.to_bytes(4, "big").hex()
-        retval = f"GAME ENTRY | Name = \"{self.name}\" | Game ID = {self.game_ID} | Checksum = {checksum_hex}\n"
+        retval = f"GAME ENTRY | Name = \"{str(self.name)}\" | Game ID = {self.game_ID} | Checksum = {checksum_hex}\n"
         master_code_repr = [i.to_bytes(4, "big").hex() for i in self.master_code]
         retval += f"Master code enabled = {self.enabled} | Master code = {master_code_repr}"
         stringified_contents = ""
@@ -286,7 +321,7 @@ class GameEntry:
 # The base class representing the entire cheat file.
 class R4CheatFile:
     def __init__(self, allow_automatic_fixes: bool):
-        self.name: str = ""
+        self.name: MaybeDecodableString = MaybeDecodableString()
         self.encoding: str = "utf-8"
         self.game_entries: list[GameEntry] = []
         self.enabled: bool = True
@@ -343,7 +378,7 @@ class R4CheatFile:
             if header[i] == 0:
                 name_end = i
                 break
-        self.name = header[0x10:name_end].decode(self.encoding)
+        self.name = MaybeDecodableString(header[0x10:name_end], self.encoding)
         self.enabled = header[0x50] != 0
 
         for i in range(0x51, 0x100):
