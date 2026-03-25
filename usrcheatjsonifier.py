@@ -49,8 +49,8 @@ def dedictionarify_cheat_folder(entry: dict) -> CheatFolder:
     retval = CheatFolder()
     retval.name = entry["name"]
     retval.comment = entry["comment"]
-    retval.enabled = entry["enabled"]
-    retval.owned_cheats = [dedictionarify_cheat_entry(cheat) for cheat in entry["entries"]]
+    retval.is_onehot_button = entry["onehot"]
+    retval.owned_cheats = [dedictionarify_cheat_entry(cheat) for cheat in entry["owned_cheats"]]
     return retval
 
 

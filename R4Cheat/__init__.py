@@ -163,19 +163,13 @@ class CheatFolder:
     def check_consistency(self):
         if (not self.is_onehot_button) or (not self._allow_automatic_fixes):
             return
-        first_enabled_cheat_index = -1
         num_enabled_cheats = 0
         for idx, cheat in enumerate(self.owned_cheats):
             if not cheat.enabled: continue
             num_enabled_cheats += 1
-            if first_enabled_cheat_index != -1:
+            if num_enabled_cheats >= 1:
                 cheat.enabled = False
-            else:
-                first_enabled_cheat_index = idx
-        if num_enabled_cheats == 0:
-            self.owned_cheats[0].enabled = True
-            print(f"Folder with onehot button ({self.name}) had zero cheats enabled. Enabled the first one ({self.owned_cheats[0].name})")
-        elif num_enabled_cheats > 1:
+        if num_enabled_cheats > 1:
             print(f"Folder with onehot button ({self.name}) had too many cheats enabled. Disabled all but the first enabled entry.")
 
     def encode(self, options: LoadingOptions) -> bytes:
