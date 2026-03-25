@@ -26,6 +26,6 @@ The file reading/writing implementation is based on an article by Nate Reprogle:
 
 ---
 
-I put reasonable effort into these scripts, but they are not perfect. Don't try to break them and they will not break.
+I put reasonable effort into these scripts, but they are not perfect. Don't try to break them and they should not break.
 
 Made by a human :heart:
