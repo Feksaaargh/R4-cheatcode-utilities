@@ -19,6 +19,7 @@ def read_4byte_padded_string(file_handle) -> bytes:
         res += chunk
 
 
+# Creates a null terminated string that is padded to 4 bytes
 def make_4byte_padded_string(inp: str, encoding: str) -> bytes:
     retval: bytes = inp.encode(encoding)
     retval += b'\0' * (4 - (len(retval) % 4))
@@ -48,18 +49,21 @@ def read_name_comment_pair(file_handle) -> tuple[bytes, bytes]:
                 comment += chunk[i:i+1]
 
 
+# Combines two null terminated strings that are all together padded to 4 bytes
 def make_name_comment_pair(name: str, comment: str, encoding: str) -> bytes:
     retval: bytes = name.encode(encoding) + b'\0' + comment.encode(encoding)
     retval += b'\0' * (4 - (len(retval) % 4))
     return retval
 
 
+# A class for passing around user requested options between functions
 class LoadingOptions:
     def __init__(self, encoding: str, allow_automatic_fixes: bool):
         self.encoding = encoding
         self.allow_automatic_fixes = allow_automatic_fixes
 
 
+# An entry in the file "address book" (game lookup table)
 class AddressBookEntry:
     def __init__(self):
         self.game_ID: bytes = b'\0\0\0\0'
@@ -96,6 +100,7 @@ class AddressBookEntry:
         return f"AddressBookEntry(game_ID={self.game_ID}, checksum={checksum_hex}, offset={self.offset}, reserved={self.reserved})"
 
 
+# A single, normal cheat
 class CheatEntry:
     def __init__(self):
         self.name: str = ""
@@ -135,6 +140,7 @@ class CheatEntry:
         return retval
 
 
+# A folder of cheats. Can only store cheats, folders cannot be nested.
 class CheatFolder:
     def __init__(self):
         self.name: str = ""
@@ -196,6 +202,7 @@ class CheatFolder:
         return retval
 
 
+# A game entry. Can contain cheats and folders.
 class GameEntry:
     def __init__(self):
         self.name: str = ""
@@ -276,6 +283,7 @@ class GameEntry:
         return retval
 
 
+# The base class representing the entire cheat file.
 class R4CheatFile:
     def __init__(self, allow_automatic_fixes: bool):
         self.name: str = ""
