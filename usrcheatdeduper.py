@@ -61,62 +61,80 @@ def automerge_entries(cheat_file: R4CheatFile, duplicate_indexes: list[int]):
 
 
 # Interactively prompt user to merge files
-# Returns which index in the indexes list was picked by the user (not the content of the indexes list, but its index!)
-def prompt_merge_entries(cheat_file: R4CheatFile, duplicate_indexes: list[int]) -> int:
+# Adds a property "duplicate_checked = True" to all game entries it checks so they don't get brought up again
+# Returns if the index used to scan the cheat entries should be incremented (False if the first entry was deleted, else True)
+def prompt_merge_entries(cheat_file: R4CheatFile, duplicate_indexes: list[int]) -> bool:
     game_entries = cheat_file.game_entries
+    # I know this isn't pretty, but it's a convenient way to communicate that an entry has been checked.
+    for i in duplicate_indexes:
+        game_entries[i].duplicate_checked = True
+
     last_error_message = ""
+    deleted_first_entry = False
     while True:
         print("==== Found following duplicated games:")
         for i in range(len(duplicate_indexes)):
             print(f"{i + 1}: ", end="")
             print_game_brief(game_entries[duplicate_indexes[i]])
-        print("Enter index to merge found entries into, 0 to ignore, or prepend index with 'P' to print it in detail.")
+        print("Enter index to merge found entries into, 0 to ignore. You can also prepend the index with 'P' to print more information, or 'D' to delete an index.")
         # print error message above input if user did something bad
         if last_error_message:
             print(last_error_message)
         last_error_message = ""
-        user_response = input("> ")
+        user_response = input("> ").lower()
         if len(user_response) == 0:
             last_error_message = "Please enter a value."
             continue
 
-        # check if requesting to print
-        if user_response[0] == 'P':
-            # user wants to print item
-            verbose_print_idx = -100
-            try:
-                verbose_print_idx = int(user_response[1:]) - 1
-            except ValueError:
-                pass
-            if verbose_print_idx >= len(duplicate_indexes) or verbose_print_idx < 0:
-                last_error_message = f"Invalid index for printing! Number must be in range [1, {len(duplicate_indexes)}]"
-                continue
-            print()
-            print_game_verbose(game_entries[duplicate_indexes[verbose_print_idx]])
-            input("[Press enter to continue]")
-            print()
+        command = ""
+        if user_response[0] not in "0123456789":
+            command = user_response[0]
+            user_response = user_response[1:]
+        chosen_idx = None
+        try:
+            chosen_idx = int(user_response) - 1
+        except ValueError:
+            pass
+        if (chosen_idx is None) or \
+                (command == "" and chosen_idx < -1) or \
+                (command != "" and chosen_idx < 0) or \
+                (chosen_idx >= len(duplicate_indexes)):
+            last_error_message = f"Invalid index! Number must be either in range [1, {len(duplicate_indexes)}] (optionally prepended with command) or 0!"
             continue
-        else:
-            # user wants to merge item
-            chosen_idx: int = -100
-            try:
-                chosen_idx = int(user_response) - 1
-            except ValueError:
-                pass
-            if chosen_idx >= len(duplicate_indexes) or chosen_idx < -1:
-                last_error_message = f"Invalid index! Number must be in range [0, {len(duplicate_indexes)}]"
-                continue
-            # check if user asked to ignore this duplicate
+
+        # command is now a single lowercase character indicating what to do (or empty to merge) and idx is the affected index
+        if command == "":
+            # requesting to merge
             if chosen_idx == -1:
-                return chosen_idx
+                # ignored current set of options
+                return True
             dest_game = game_entries[duplicate_indexes[chosen_idx]]
-            source_indidices = duplicate_indexes[:chosen_idx] + duplicate_indexes[chosen_idx + 1:]
-            merge_games(dest_game, *[game_entries[i] for i in source_indidices])
+            source_indices = duplicate_indexes[:chosen_idx] + duplicate_indexes[chosen_idx+1:]
+            merge_games(dest_game, *[game_entries[i] for i in source_indices])
             # need to make absolutely sure that indexes are in order, otherwise this will delete unintended items
-            source_indidices.sort()
-            for i in source_indidices[::-1]:
+            source_indices.sort()
+            for i in source_indices[::-1]:
                 del game_entries[i]
-            return chosen_idx
+            return chosen_idx > 0 or deleted_first_entry
+        elif command == "p":
+            # requesting to print
+            print()
+            print_game_verbose(game_entries[duplicate_indexes[chosen_idx]])
+            input("[Press enter to continue]\n")
+            continue
+        elif command == "d":
+            # requesting to delete
+            if chosen_idx == 0:
+                deleted_first_entry = True
+            del game_entries[duplicate_indexes[chosen_idx]]
+            deleted_index = duplicate_indexes[chosen_idx]
+            del duplicate_indexes[chosen_idx]
+            duplicate_indexes = [i if (i < deleted_index) else (i - 1) for i in duplicate_indexes]
+            if len(duplicate_indexes) == 1:
+                return deleted_first_entry
+        else:
+            last_error_message = "Unknown command! Please only use 'P' to print an index or 'D' to delete an index."
+            continue
 
 
 # Core function of this program.
@@ -127,6 +145,9 @@ def process_duplicates(cheat_file: R4CheatFile, options: DedupeOptions):
     start_idx = -1
     while start_idx < len(game_entries) - 1:
         start_idx += 1
+        # check if this game has already been checked
+        if hasattr(game_entries[start_idx], "duplicate_checked") and game_entries[start_idx].duplicate_checked:
+            continue
         # duplicate_game_indexes is only for one set of duplicate games
         duplicate_game_indexes: list[int] = [start_idx]
         game_name: MaybeDecodableString = game_entries[start_idx].name
@@ -152,9 +173,9 @@ def process_duplicates(cheat_file: R4CheatFile, options: DedupeOptions):
             automerge_entries(cheat_file, duplicate_game_indexes)
         # not automerging, prompt user for action
         else:
-            chosen_entry = prompt_merge_entries(cheat_file, duplicate_game_indexes)
+            should_increment_counter = prompt_merge_entries(cheat_file, duplicate_game_indexes)
             # if user deleted the first entry, need to adjust the loop value so it doesn't skip anything
-            if chosen_entry > 0:
+            if not should_increment_counter:
                 start_idx -= 1
 
 
