@@ -370,6 +370,9 @@ class R4CheatFile:
                 self.encoding = "shift_jis"
             case b'\x55\x73\x41\x59':
                 self.encoding = "utf-8"
+            case b'\x00\x00\x00\x00':
+                print(f"WARNING: file missing encoding (was {encoding_bytes.hex()}), assuming \"gbk\". This may produce mojibake!")
+                self.encoding = "gbk"
             case _:
                 raise ValueError(f"Error loading file: Unknown encoding: {encoding_bytes.hex()}")
 
