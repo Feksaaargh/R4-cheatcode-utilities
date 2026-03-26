@@ -2,9 +2,9 @@
 
 Each section here describes an object used in the JSON output.
 
-If a value is not quoted, it is stating that the contents are a specific object type. For nonstandard objects (other than string, int, etc) they are described here:
-
 The items here are organized from most specific to least specific.
+
+If a value is not quoted, it is stating that the contents are a specific object type. For nonstandard objects (other than string, int, etc) they are described here:
 
 
 ## Encoding
@@ -23,7 +23,7 @@ However, converting to JSON and straight back should never produce incompatible 
 
 ## MaybeDecodableString
 
-Since R4CCE has a GBK encoder which can produce output incompatible with Python, this is used to handle undecodable strings.
+This structure is used to handle undecodable strings moderately gracefully.
 
 If a string is decodable, this is emitted as a simple string. Otherwise, it is emitted as a JSON object containing the hex-encoded bytes of the string and the intended encoding.
 
