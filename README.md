@@ -2,23 +2,42 @@
 
 This repository contains tools for interacting with R4 cheat code files (usrcheat.dat).
 
+
+## Deduplicating game entries
+
+To deduplicate a cheat file:
+
+```bash
+python3 usrcheatdeduper.py usrcheat.dat deduped_usrcheat.dat
+```
+
+This is an interactive process. It can be automated with `--merge-all`, which will merge all later entries of a game into the earliest one. I'd recommend manually checking though.
+
+To modify what counts as a duplicate, use `--duplicate-check 'id,hash,name'` and remove the items in the comma-delimited list to your preference. (Default is `'id,hash'`)
+
+If something exists at the destination, it will by default not get overwritten. To overwrite anyway, use the `--overwrite` flag.
+
+
+## Converting to / from JSON
+
 To convert a usrcheat.dat file to JSON:
 
 ```bash
-./usrcheatjsonifier.py usrcheat.dat output.json
+python3 usrcheatjsonifier.py usrcheat.dat output.json
 ```
 
 To convert an exported JSON file back to usrcheat.dat:
 
 ```bash
-./usrcheatjsonifier.py --decode output.json usrcheat.dat
+python3 usrcheatjsonifier.py --decode output.json usrcheat.dat
 ```
 
 If something exists at the destination, it will by default not get overwritten. To overwrite anyway, use the `--overwrite` flag.
 
-A tool to merge cheat code files gracefully (using the JSON output) will be added in the future.
+This tool is not particularly useful as-is, and is mostly useful for developers who wish to quickly edit an R4 cheat file without worrying much about reading/writing.
 
----
+The structure of the emitted JSON can be found at [docs/json_format.md](/docs/json_format.md).
+
 
 ## Acknowledgements
 
