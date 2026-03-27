@@ -3,7 +3,28 @@
 This repository contains tools for interacting with R4 cheat code files (usrcheat.dat).
 
 
-## Deduplicating game entries
+## Merging cheat files
+
+To merge two or more cheat files:
+
+```bash
+python3 usrcheatmerger.py usrcheat1.dat usrcheat2.dat output_usrcheat.dat
+```
+
+This is an interactive process. It can be automated with `--merge-all`, which will merge all entries into the first found matching game.
+
+The name of the database will be inherited from the LEFTMOST file.
+
+The interactive interface does not handle duplicate entries in the leftmost file (always merges into the first matched item). It's recommended to deduplicate that file before merging into it.
+
+Can define as many input files as needed (add usrcheat3.dat, usrcheat4.dat, etc.) They will be merged into the first file, with entries appended if they are not matched.
+
+To modify what counts as a matching game, use `--match-check 'id,hash,name'` and remove the items in the comma-delimited list to your preference. (Default is `'id,hash'`)
+
+If something exists at the destination, it will by default not get overwritten. To overwrite anyway, use the `--overwrite` flag.
+
+
+## Deduplicating games in a file
 
 To deduplicate a cheat file:
 
@@ -18,7 +39,7 @@ To modify what counts as a duplicate, use `--duplicate-check 'id,hash,name'` and
 If something exists at the destination, it will by default not get overwritten. To overwrite anyway, use the `--overwrite` flag.
 
 
-## Converting to / from JSON
+## Converting files to / from JSON
 
 To convert a usrcheat.dat file to JSON:
 
@@ -32,9 +53,9 @@ To convert an exported JSON file back to usrcheat.dat:
 python3 usrcheatjsonifier.py --decode output.json usrcheat.dat
 ```
 
-If something exists at the destination, it will by default not get overwritten. To overwrite anyway, use the `--overwrite` flag.
-
 This tool is not particularly useful as-is, and is mostly useful for developers who wish to quickly edit an R4 cheat file without worrying much about reading/writing.
+
+If something exists at the destination, it will by default not get overwritten. To overwrite anyway, use the `--overwrite` flag.
 
 The structure of the emitted JSON can be found at [docs/json_format.md](/docs/json_format.md).
 
